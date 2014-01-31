@@ -875,6 +875,163 @@ $.imgAreaSelect = function (img, options) {
     }
 
     /**
+     *  On "mousewheel" selection resize function
+     */
+    function mouseWheelResize() {
+
+        aspectRatio = aspectRatio || 1;
+
+        /* set default wheelResizeDelta if not provided */
+        var wheelResizeDelta = options.wheelResizeDelta || 4;
+
+        /* do wheelResizeDelta even which better because of resize center is center
+         of the selection $box. Do it respecting wheelResizeDelta's number sign */
+        wheelResizeDelta = abs( wheelResizeDelta % 2 ) > 0
+            ? wheelResizeDelta + wheelResizeDelta / abs( wheelResizeDelta )
+            : wheelResizeDelta;
+
+
+        /* set deltaX deltaY - the resize delta for the selection width and
+         height depending on the aspect ratio, considering wheelResizeDelta
+         for bigger side when aspect ratio not equal 1.
+         Also we bear in mind wheelResizeDelta number sign to revert direction if provided */
+        var delta = (function( a, b , delta ) {
+
+            return {
+                x: delta * a / b,
+                y: delta / b
+            }
+        })( aspectRatio, aspectRatio > 1 ? aspectRatio : 1 , wheelResizeDelta );
+
+        /**
+         * Scales selection depending on wheel direction
+         *
+         * @param {Number} direction
+         *                              equals '1' or '-1'
+         * @param {Object} wheelDelta
+         *                              resize delta { x:{Number}, y:{Number} }
+         */
+        function scaleSelection( direction, wheelDelta ) {
+
+            /**
+             * Returns full delta or only half
+             * depending on right or bottom image border closure
+             *
+             * @param {Number} coord
+             *                       x or y of left top selection corner coords
+             * @param {Number} selSide
+             *                        selection side
+             * @param {Number} imgSide
+             *                        image side
+             * @param {Number} delta
+             *                      appropriate delta (delta.x or delta.y)
+             * @returns {number}
+             */
+            function _conditionalDelta( coord, selSide, imgSide, delta ) {
+
+                return ( coord + selSide + delta / 2 >= imgSide )
+                    && !( coord + delta / 2 <= 0 )
+                    ? delta * 2
+                    : delta
+            }
+
+            /* get selection */
+            var   sel = getSelection.call( this, false )
+
+            /* set delta direction */
+                , delta = {
+                    x: wheelDelta.x * direction,
+                    y: wheelDelta.y * direction
+                }
+            /* get conditional delta */
+                , deltaX = _conditionalDelta( sel.x1, sel.width, imgWidth, delta.x )
+                , deltaY = _conditionalDelta( sel.y1, sel.height, imgHeight, delta.y )
+
+            /* new selection left top corner coords to be checked
+            that not to cross image border or mix min selection defaults*/
+                , selX = sel.x1 - deltaX / 2
+                , selY = sel.y1 - deltaY / 2
+
+            /* wc, hc - width and height condition to check if right
+            and bottom border of the selection are inside image after resize */
+                , wc = ( sel.x1 + sel.width + delta.x / 2 ) <= imgWidth
+                , hc = ( sel.y1 + sel.height + delta.y/ 2 ) <= imgHeight
+
+            /* extra condition to check if both right
+            and left or top and bottom selection borders are close to
+            image border that not to change width and height of left top coords */
+                , xc = !wc && ( sel.x1 === 0 ) || !hc && ( sel.y1 === 0 )
+                ;
+            /* set new selection width*/
+            sel.height += xc ? 0 : delta.y;
+            sel.width += xc ? 0 : delta.x;
+
+            /* check if new selections size is inside of max and min defaults */
+            sel.width = min( maxWidth, max( minWidth, sel.width ));
+            sel.height = min( maxHeight, max( minHeight, sel.height ));
+
+            /**
+             * Returns new left top selection corner coordinate
+             *
+             * @param {Number} selCoodr
+             *                         current coordinate ( sel.x or sel.y )
+             * @param {Number} selDem
+             *                       new selection side ( sel.width or sel.height )
+             * @param {Number} selNew
+             *                       new not checked selection coord ( selX or selY )
+             * @param {Number} max
+             *                     default selections max ( maxWidth or maxHeight )
+             * @param {Number} min
+             *                     default selections min ( minWidth or minHeight )
+             * @param {Number} imgDem
+             *                      image side ( imgWidth or imgHeight )
+             * @param {Boolean} xc
+             *                      extra condition
+             * @returns {Number}
+             */
+            function newCoord( selCoodr, selDem, selNew, max, min, imgDem, xc ) {
+
+                return selDem === min || selDem === max
+                    ? selCoodr + selDem > imgDem
+                        ? imgDem - selDem
+                        : selCoodr
+                    : selNew >= 0
+                        ? !xc
+                            ? selNew
+                            : selCoodr
+                        : 0;
+            }
+            /* set new selection left top corner coordinates */
+            sel.x1 = newCoord( sel.x1, sel.width, selX, maxWidth, minWidth, imgWidth, xc );
+
+            sel.y1 = newCoord( sel.y1, sel.height, selY, maxHeight, minHeight, imgHeight, xc );
+
+            /* update selection*/
+            setSelection.call( this, sel.x1, sel.y1, sel.x1 + sel.width, sel.y1 + sel.height );
+            update.call(this);
+        }
+
+        /* unbind "mousewheel" event from previous instance */
+        $box.unbind('mousewheel');
+        $outer.unbind('mousewheel');
+
+        /* bind "mousewheel" to both selection $box and $outer elements */
+        $box.bind('mousewheel', function(event) {
+
+            /* call selection scaling depending on mouse wheel
+             direction got from event.deltaY  */
+            scaleSelection( event.deltaY > 0 ? 1 : -1, delta );
+
+            /* call "on selection change" handlers */
+            options.onSelectChange( img, getSelection(false) );
+        });
+        $outer.bind('mousewheel', function(event) {
+
+            scaleSelection( event.deltaY  > 0 ? 1 : -1, delta );
+            options.onSelectChange( img, getSelection(false) );
+        });
+    }
+    /**
      * Set plugin options
      * 
      * @param newOptions
@@ -936,8 +1093,7 @@ $.imgAreaSelect = function (img, options) {
 
         /* Set selection */
         if (newOptions.x1 != null) {
-            setSelection(newOptions.x1, newOptions.y1, newOptions.x2,
-                newOptions.y2);
+            setSelection(newOptions.x1, newOptions.y1, newOptions.x2, newOptions.y2);
             newOptions.show = !newOptions.hide;
         }
 
@@ -1006,8 +1162,12 @@ $.imgAreaSelect = function (img, options) {
         }
         
         options.enable = options.disable = undefined;
+
+        /**** enable "on mouse wheel" resize ****/
+        options.mouseWheelResize && mouseWheelResize.call(this);
+
     }
-    
+
     /**
      * Remove plugin completely
      */
