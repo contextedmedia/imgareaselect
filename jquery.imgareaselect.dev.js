@@ -965,14 +965,14 @@ $.imgAreaSelect = function (img, options) {
                  * and bottom border of the selection are inside image after resize
                  */
                 , wc = ( sel.x1 + sel.width + delta.x / 2 ) <= imgWidth
-                , hc = ( sel.y1 + sel.height + delta.y/ 2 ) <= imgHeight
+                , hc = ( sel.y1 + sel.height + delta.y / 2 ) <= imgHeight
 
                 /*
                  * extra condition to check if both right
                  * and left or top and bottom selection borders are close to
                  * image border that not to change width and height of left top coords
                  */
-                , xc = !wc && ( sel.x1 === 0 ) || !hc && ( sel.y1 === 0 )
+                , xc = !wc && ( selX <= 0 ) || !hc && ( selY <= 0 )
                 ;
             /* set new selection width*/
             sel.height += xc ? 0 : delta.y;
@@ -1003,7 +1003,7 @@ $.imgAreaSelect = function (img, options) {
              */
             function newCoord( selCoodr, selDem, selNew, max, min, imgDem, xc ) {
 
-                return selDem === min || selDem === max
+                return selDem <= min || selDem >= max
                     ? selCoodr + selDem > imgDem
                         ? imgDem - selDem
                         : selCoodr
